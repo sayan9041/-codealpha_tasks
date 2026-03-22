@@ -1,0 +1,166 @@
+# =========================
+# STEP 1: Install Libraries
+# =========================
+!pip install librosa numpy pandas scikit-learn matplotlib tensorflow
+
+# =========================
+# STEP 2: Import Libraries
+# =========================
+import os
+import numpy as np
+import pandas as pd
+import librosa
+import matplotlib.pyplot as plt
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Conv1D, MaxPooling1D, Flatten, Dropout
+from tensorflow.keras.utils import to_categorical
+
+# =========================
+# STEP 3: Mount Google Drive
+# =========================
+from google.colab import drive
+drive.mount('/content/drive')
+
+# =========================
+# STEP 4: Dataset Path
+# =========================
+DATA_PATH = "/content/drive/MyDrive/RAVDESS/"  # Change if needed
+
+# =========================
+# STEP 5: Emotion Extractor
+# =========================
+def extract_emotion(file_name):
+    emotion_code = file_name.split("-")[2]
+    emotion_dict = {
+        "01": "neutral", "02": "calm", "03": "happy",
+        "04": "sad", "05": "angry", "06": "fearful",
+        "07": "disgust", "08": "surprised"
+    }
+    return emotion_dict.get(emotion_code)
+
+# =========================
+# STEP 6: Feature Extraction (MFCC)
+# =========================
+def extract_features(file_path):
+    audio, sr = librosa.load(file_path, duration=3, offset=0.5)
+    mfcc = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=40)
+    return np.mean(mfcc.T, axis=0)
+
+# =========================
+# STEP 7: Convert Audio → CSV
+# =========================
+data = []
+
+for root, dirs, files in os.walk(DATA_PATH):
+    for file in files:
+        if file.endswith(".wav"):
+            path = os.path.join(root, file)
+            emotion = extract_emotion(file)
+            features = extract_features(path)
+            
+            row = list(features) + [emotion]
+            data.append(row)
+
+columns = [f"mfcc_{i}" for i in range(40)] + ["emotion"]
+df = pd.DataFrame(data, columns=columns)
+
+df.to_csv("emotion_dataset.csv", index=False)
+print("✅ CSV Created Successfully!")
+
+# =========================
+# STEP 8: Load CSV Dataset
+# =========================
+df = pd.read_csv("emotion_dataset.csv")
+
+X = df.drop("emotion", axis=1).values
+y = df["emotion"].values
+
+# =========================
+# STEP 9: Encode Labels
+# =========================
+le = LabelEncoder()
+y_encoded = le.fit_transform(y)
+y_categorical = to_categorical(y_encoded)
+
+# =========================
+# STEP 10: Train-Test Split
+# =========================
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y_categorical, test_size=0.2, random_state=42
+)
+
+# =========================
+# STEP 11: Reshape for CNN
+# =========================
+X_train = X_train[..., np.newaxis]
+X_test = X_test[..., np.newaxis]
+
+# =========================
+# STEP 12: Build CNN Model
+# =========================
+model = Sequential()
+
+model.add(Conv1D(64, 5, activation='relu', input_shape=(40,1)))
+model.add(MaxPooling1D(2))
+
+model.add(Conv1D(128, 5, activation='relu'))
+model.add(MaxPooling1D(2))
+
+model.add(Flatten())
+
+model.add(Dense(128, activation='relu'))
+model.add(Dropout(0.5))
+
+model.add(Dense(y_categorical.shape[1], activation='softmax'))
+
+model.compile(
+    optimizer='adam',
+    loss='categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+model.summary()
+
+# =========================
+# STEP 13: Train Model
+# =========================
+history = model.fit(
+    X_train, y_train,
+    validation_data=(X_test, y_test),
+    epochs=30,
+    batch_size=32
+)
+
+# =========================
+# STEP 14: Evaluate Model
+# =========================
+loss, accuracy = model.evaluate(X_test, y_test)
+print("🎯 Test Accuracy:", accuracy)
+
+# =========================
+# STEP 15: Plot Accuracy
+# =========================
+plt.plot(history.history['accuracy'], label='Train')
+plt.plot(history.history['val_accuracy'], label='Validation')
+plt.legend()
+plt.title("Accuracy Graph")
+plt.show()
+
+# =========================
+# STEP 16: Predict Emotion
+# =========================
+def predict_emotion(file_path):
+    feature = extract_features(file_path)
+    feature = feature.reshape(1, 40, 1)
+    
+    prediction = model.predict(feature)
+    emotion = le.inverse_transform([np.argmax(prediction)])
+    
+    return emotion[0]
+
+# Example Prediction
+print("🎤 Predicted Emotion:", predict_emotion("/content/sample.wav"))
