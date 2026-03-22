@@ -1,0 +1,143 @@
+import pandas as pd
+import numpy as np
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score, roc_curve
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from google.colab import files
+uploaded = files.upload()
+
+# Replace with your file name
+df = pd.read_csv("/content/german_credit_data[1].csv")
+
+df.head()
+
+
+
+# Check dataset info
+print(df.info())
+
+# Handle missing values
+imputer = SimpleImputer(strategy='mean')
+# df[['income', 'debts']] = imputer.fit_transform(df[['income', 'debts']]) # These columns do not exist in the current dataframe
+
+# Encode categorical columns
+le = LabelEncoder()
+# df['employment_status'] = le.fit_transform(df['employment_status']) # This column does not exist in the current dataframe
+
+# Target column (example: creditworthy)
+# 1 = Good, 0 = Bad
+# y = df['creditworthy'] # This column does not exist in the current dataframe
+
+# Drop target from features
+# X = df.drop('creditworthy', axis=1) # This column does not exist in the current dataframe
+
+# Feature Scaling
+scaler = StandardScaler()
+# X_scaled = scaler.fit_transform(X) # X is not defined due to previous errors
+
+
+
+# Check dataset info
+print(df.info())
+
+# Handle missing values
+imputer = SimpleImputer(strategy='mean')
+# df[['income', 'debts']] = imputer.fit_transform(df[['income', 'debts']]) # These columns do not exist in the current dataframe
+
+# Encode categorical columns
+le = LabelEncoder()
+# df['employment_status'] = le.fit_transform(df['employment_status']) # This column does not exist in the current dataframe
+
+# Target column (example: creditworthy)
+# 1 = Good, 0 = Bad
+# y = df['creditworthy'] # This column does not exist in the current dataframe
+
+# Drop target from features
+# X = df.drop('creditworthy', axis=1) # This column does not exist in the current dataframe
+
+# Feature Scaling
+scaler = StandardScaler()
+# X_scaled = scaler.fit_transform(X) # X is not defined due to previous errors
+
+lr = LogisticRegression()
+lr.fit(X_train, y_train)
+lr_pred = lr.predict(X_test)
+
+dt = DecisionTreeClassifier()
+dt.fit(X_train, y_train)
+dt_pred = dt.predict(X_test)
+
+rf = RandomForestClassifier(n_estimators=100)
+rf.fit(X_train, y_train)
+rf_pred = rf.predict(X_test)
+
+def evaluate_model(y_test, y_pred, model_name):
+    print(f"\n--- {model_name} ---")
+    print("Accuracy:", accuracy_score(y_test, y_pred))
+    print("Classification Report:\n", classification_report(y_test, y_pred))
+
+# Evaluate all models
+evaluate_model(y_test, lr_pred, "Logistic Regression")
+evaluate_model(y_test, dt_pred, "Decision Tree")
+evaluate_model(y_test, rf_pred, "Random Forest")
+
+
+def plot_conf_matrix(y_test, y_pred, title):
+    cm = confusion_matrix(y_test, y_pred)
+    sns.heatmap(cm, annot=True, fmt='d')
+    plt.title(title)
+    plt.xlabel("Predicted")
+    plt.ylabel("Actual")
+    plt.show()
+
+plot_conf_matrix(y_test, rf_pred, "Random Forest Confusion Matrix")
+
+rf_probs = rf.predict_proba(X_test)[:,1]
+
+fpr, tpr, _ = roc_curve(y_test, rf_probs)
+roc_auc = roc_auc_score(y_test, rf_probs)
+
+plt.plot(fpr, tpr, label="Random Forest (AUC = %0.2f)" % roc_auc)
+plt.plot([0,1],[0,1],'--')
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC Curve")
+plt.legend()
+plt.show()
+
+
+importances = rf.feature_importances_
+feature_names = X.columns # Get feature names from X, which was used for training
+
+feat_imp = pd.Series(importances, index=feature_names)
+feat_imp.sort_values().plot(kind='barh')
+
+plt.title("Feature Importance")
+plt.show()
+
+# Example new input
+# First, ensure the scaler is fitted (it was reset/not fitted due to prior cell modifications)
+scaler.fit(X) # Fit the scaler with the original feature set X
+
+# Adjust new_data to match the single feature (MONTHS_BALANCE) used for training
+# For example, predicting for a customer with -5 months balance
+new_data = np.array([[-5]])  # Example: -5 months balance
+
+# Convert new_data to a DataFrame with column names to avoid the UserWarning
+new_data_df = pd.DataFrame(new_data, columns=X.columns)
+
+new_data_scaled = scaler.transform(new_data_df)
+prediction = rf.predict(new_data_scaled)
+
+print("Creditworthiness Prediction:", "Good" if prediction[0]==0 else "Bad") # Assuming 0=Good, 1=Bad from CREDIT_RISK mapping
